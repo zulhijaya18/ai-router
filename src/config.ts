@@ -44,6 +44,13 @@ export interface RouteTarget {
    * non-empty "tools" array skip this target entirely. Defaults to true.
    */
   supportsTools?: boolean;
+  /**
+   * Set to false if this model is text-only and can't accept image or
+   * document (file) content blocks. Requests whose messages contain a
+   * non-text content part (e.g. `image_url`, `file`) skip this target
+   * entirely. Defaults to true.
+   */
+  supportsImages?: boolean;
 }
 
 /**
@@ -96,16 +103,44 @@ export const AUTO_TARGETS: RouteTarget[] = [
   // and NVIDIA NIM's current backends (raw tokens like "<|channel|>" ending
   // up in tool names, or the header parser panicking outright). Until that's
   // fixed upstream, keep these unavailable for requests with `tools`.
-  { provider: "cerebras", model: "gpt-oss-120b", contextWindow: 131_072, supportsTools: false },
+  {
+    provider: "cerebras",
+    model: "gpt-oss-120b",
+    contextWindow: 131_072,
+    supportsTools: false,
+    supportsImages: false,
+  },
+  {
+    // Kimi K3 has native vision support, but that hasn't been verified
+    // against NVIDIA NIM's specific hosted endpoint yet — double-check
+    // with a real image request before trusting this in production.
+    provider: "nvidia-nim",
+    model: "moonshotai/kimi-k3",
+    contextWindow: 1_000_000,
+  },
   {
     provider: "nvidia-nim",
     model: "openai/gpt-oss-20b",
     contextWindow: 131_072,
     supportsTools: false,
+    supportsImages: false,
+  },
+  // Purpose-built multimodal model (text, image, video, audio in). This is
+  // the one to actually rely on for image/document requests.
+  {
+    provider: "nvidia-nim",
+    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    contextWindow: 256_000,
   },
   {
     provider: "openrouter",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
     contextWindow: 1_000_000,
+    supportsImages: false,
+  },
+  {
+    provider: "openrouter",
+    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    contextWindow: 256_000,
   },
 ];

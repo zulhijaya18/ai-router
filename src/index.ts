@@ -73,6 +73,25 @@ function estimateTokens(body: ChatBody): number {
   return Math.ceil(promptChars / 4) + output;
 }
 
+/**
+ * True if any message has a non-text content part (e.g. `image_url`,
+ * `input_image`, `file`) — the OpenAI-style way of attaching an image or
+ * document to a chat message.
+ */
+function hasMultimodalContent(messages: unknown[]): boolean {
+  for (const m of messages) {
+    if (!m || typeof m !== "object") continue;
+    const content = (m as Record<string, unknown>).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (!part || typeof part !== "object") continue;
+      const type = (part as Record<string, unknown>).type;
+      if (typeof type === "string" && type !== "text") return true;
+    }
+  }
+  return false;
+}
+
 function retryAfterMs(res: Response, fallbackMs: number): number {
   const value = res.headers.get("retry-after");
   if (!value) return fallbackMs;
@@ -287,6 +306,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const est = estimateTokens(body);
   const usesTools = Array.isArray(body.tools) && body.tools.length > 0;
+  const usesImages = Array.isArray(body.messages) && hasMultimodalContent(body.messages);
   const quota = env.QUOTA.get(env.QUOTA.idFromName("global"));
   const tried = new Set<number>();
   const failures: string[] = [];
@@ -313,6 +333,9 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
       } else if (usesTools && t.supportsTools === false) {
         tried.add(index);
         failures.push(`${label}: does not reliably support tool calling`);
+      } else if (usesImages && t.supportsImages === false) {
+        tried.add(index);
+        failures.push(`${label}: does not support image/document content`);
       } else {
         candidates.push({
           index,
