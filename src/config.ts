@@ -37,6 +37,13 @@ export interface RouteTarget {
   model: string;
   /** Model's context window. Oversized requests are automatically skipped. */
   contextWindow?: number;
+  /**
+   * Set to false if this model/provider is known to be unreliable for
+   * tool/function calling (e.g. gpt-oss's Harmony format leaking or
+   * crashing the backend's tool-call parser). Requests that include a
+   * non-empty "tools" array skip this target entirely. Defaults to true.
+   */
+  supportsTools?: boolean;
 }
 
 /**
@@ -85,8 +92,17 @@ export const PROVIDERS: ProviderConfig[] = [
 // whenever the one above fails, hits a limit, or is in cooldown.
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
-  { provider: "cerebras", model: "gpt-oss-120b", contextWindow: 131_072 },
-  { provider: "nvidia-nim", model: "openai/gpt-oss-20b", contextWindow: 131_072 },
+  // gpt-oss's Harmony-format tool calls are known to leak/crash on Cerebras
+  // and NVIDIA NIM's current backends (raw tokens like "<|channel|>" ending
+  // up in tool names, or the header parser panicking outright). Until that's
+  // fixed upstream, keep these unavailable for requests with `tools`.
+  { provider: "cerebras", model: "gpt-oss-120b", contextWindow: 131_072, supportsTools: false },
+  {
+    provider: "nvidia-nim",
+    model: "openai/gpt-oss-20b",
+    contextWindow: 131_072,
+    supportsTools: false,
+  },
   {
     provider: "openrouter",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",

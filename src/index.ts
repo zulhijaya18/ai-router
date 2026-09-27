@@ -286,6 +286,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   }
 
   const est = estimateTokens(body);
+  const usesTools = Array.isArray(body.tools) && body.tools.length > 0;
   const quota = env.QUOTA.get(env.QUOTA.idFromName("global"));
   const tried = new Set<number>();
   const failures: string[] = [];
@@ -309,6 +310,9 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
       } else if (t.contextWindow && est > t.contextWindow) {
         tried.add(index);
         failures.push(`${label}: context ${t.contextWindow} < estimated ${est} tokens`);
+      } else if (usesTools && t.supportsTools === false) {
+        tried.add(index);
+        failures.push(`${label}: does not reliably support tool calling`);
       } else {
         candidates.push({
           index,
