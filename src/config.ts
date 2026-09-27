@@ -117,7 +117,13 @@ export const AUTO_TARGETS: RouteTarget[] = [
     supportsTools: false,
     supportsImages: false,
   },
-    {
+  {
+    provider: "nvidia-nim",
+    model: "nvidia/nemotron-3-ultra-550b-a55b",
+    contextWindow: 1_000_000,
+    supportsImages: false,
+  },
+  {
     provider: "openrouter",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
     contextWindow: 1_000_000,
