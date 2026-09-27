@@ -85,7 +85,7 @@ export const PROVIDERS: ProviderConfig[] = [
 // whenever the one above fails, hits a limit, or is in cooldown.
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
-  { provider: "cerebras", model: "openai/gpt-oss-120b", contextWindow: 131_072 },
+  { provider: "cerebras", model: "gpt-oss-120b", contextWindow: 131_072 },
   { provider: "nvidia-nim", model: "openai/gpt-oss-20b", contextWindow: 131_072 },
   {
     provider: "openrouter",

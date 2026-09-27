@@ -133,7 +133,7 @@ Example result:
 {
   "ok": false,
   "checks": [
-    { "provider": "cerebras", "model": "openai/gpt-oss-120b", "ok": true, "status": 200, "latencyMs": 312 },
+    { "provider": "cerebras", "model": "gpt-oss-120b", "ok": true, "status": 200, "latencyMs": 312 },
     { "provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free", "ok": true, "status": 200, "latencyMs": 900 },
     { "provider": "nvidia-nim", "model": "openai/gpt-oss-20b", "ok": false, "error": "secret NVIDIA_NIM_API_KEY is not set" }
   ]
