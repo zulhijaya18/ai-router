@@ -117,18 +117,18 @@ export const AUTO_TARGETS: RouteTarget[] = [
     supportsTools: false,
     supportsImages: false,
   },
+    {
+    provider: "openrouter",
+    model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    contextWindow: 1_000_000,
+    supportsImages: false,
+  },
   // Purpose-built multimodal model (text, image, video, audio in). This is
   // the one to actually rely on for image/document requests.
   {
     provider: "nvidia-nim",
     model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     contextWindow: 256_000,
-  },
-  {
-    provider: "openrouter",
-    model: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    contextWindow: 1_000_000,
-    supportsImages: false,
   },
   {
     provider: "openrouter",
