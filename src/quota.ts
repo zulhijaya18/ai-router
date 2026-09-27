@@ -2,9 +2,9 @@ import { DurableObject } from "cloudflare:workers";
 import type { Limits } from "./config";
 
 export interface Candidate {
-  /** Index target di AUTO_TARGETS */
+  /** Index of the target in AUTO_TARGETS */
   index: number;
-  /** Kunci kuota (ID provider) */
+  /** Quota key (provider ID) */
   quotaKey: string;
   limits: Limits;
 }
@@ -19,9 +19,9 @@ export interface Counter {
 }
 
 /**
- * Satu instance global yang menyimpan pemakaian semua provider.
- * Durable Object memproses panggilan satu per satu,
- * jadi counter tidak bentrok walau ada request bersamaan.
+ * A single global instance that tracks usage across all providers.
+ * A Durable Object processes calls one at a time,
+ * so counters never race even under concurrent requests.
  */
 export class QuotaTracker extends DurableObject {
   private counters = new Map<string, Counter>();
@@ -53,7 +53,7 @@ export class QuotaTracker extends DurableObject {
     await this.ctx.storage.put(key, c);
   }
 
-  /** Skor sisa kuota harian (0..1). -1 berarti tidak boleh dipakai. */
+  /** Remaining daily quota score (0..1). -1 means it can't be used. */
   private headroom(c: Counter, limits: Limits, est: number, now: number): number {
     if (now < c.cooldownUntil) return -1;
     if (limits.rpm && c.minuteRequests >= limits.rpm) return -1;
@@ -72,9 +72,9 @@ export class QuotaTracker extends DurableObject {
   }
 
   /**
-   * Pilih target pertama (sesuai urutan priority list) yang masih ada sisa
-   * kuota, dan langsung catat pemakaiannya (reservasi).
-   * Mengembalikan index target, atau null kalau semua habis.
+   * Pick the first target (in priority-list order) that still has quota
+   * left, and immediately record its usage (reservation).
+   * Returns the target's index, or null if everything is exhausted.
    */
   async acquire(candidates: Candidate[], estTokens: number): Promise<number | null> {
     const now = Date.now();
@@ -93,7 +93,7 @@ export class QuotaTracker extends DurableObject {
     return null;
   }
 
-  /** Ganti estimasi token dengan jumlah token asli dari response. */
+  /** Replace the token estimate with the actual token count from the response. */
   async record(key: string, actualTokens: number, estimatedTokens: number): Promise<void> {
     const c = await this.load(key);
     c.tokens = Math.max(0, c.tokens + actualTokens - estimatedTokens);
@@ -101,8 +101,8 @@ export class QuotaTracker extends DurableObject {
   }
 
   /**
-   * Batalkan reservasi saat request gagal.
-   * countRequest=true: request tetap dihitung (misalnya kena 429).
+   * Undo a reservation when a request fails.
+   * countRequest=true: still count the request (e.g. it hit a 429).
    */
   async fail(
     key: string,
@@ -128,7 +128,7 @@ export class QuotaTracker extends DurableObject {
     return out;
   }
 
-  /** Reset counter satu provider, atau semua kalau key kosong. */
+  /** Reset one provider's counter, or all of them if key is empty. */
   async reset(key?: string): Promise<void> {
     if (key) {
       this.counters.delete(key);

@@ -16,7 +16,7 @@ export interface Env {
 }
 
 interface ChatBody {
-  /** Diabaikan sepenuhnya oleh proxy. Target selalu ditentukan oleh AUTO_TARGETS di config.ts. */
+  /** Completely ignored by the proxy. The target is always chosen from AUTO_TARGETS in config.ts. */
   model?: string;
   messages?: unknown[];
   tools?: unknown[];
@@ -32,12 +32,12 @@ type QuotaStub = DurableObjectStub<QuotaTracker>;
 const PROVIDER_MAP = new Map(PROVIDERS.map((p) => [p.id, p]));
 const TOTAL_TOKENS_RE = /"total_tokens"\s*:\s*(\d+)/;
 
-// Status yang memicu pindah ke provider berikutnya.
-// 400 dan 422 tidak termasuk karena biasanya kesalahan request itu sendiri.
+// Statuses that trigger a move to the next provider.
+// 400 and 422 are excluded because they're usually the request's own fault.
 const FALLBACK_STATUSES = new Set([401, 402, 403, 404, 408, 409, 413, 429]);
 
 // ---------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------
 
 function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
@@ -66,7 +66,7 @@ function isAuthorized(req: Request, env: Env): boolean {
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
-/** Estimasi kasar: 1 token ≈ 4 karakter. */
+/** Rough estimate: 1 token ≈ 4 characters. */
 function estimateTokens(body: ChatBody): number {
   const promptChars = JSON.stringify([body.messages ?? [], body.tools ?? []]).length;
   const output = Number(body.max_tokens ?? body.max_completion_tokens ?? 1024);
@@ -84,12 +84,12 @@ function retryAfterMs(res: Response, fallbackMs: number): number {
 
 function cooldownFor(res: Response): number {
   if (res.status === 429) return retryAfterMs(res, 60_000);
-  if (res.status === 401 || res.status === 403) return 5 * 60_000; // key salah/diblokir
+  if (res.status === 401 || res.status === 403) return 5 * 60_000; // bad/blocked key
   if (res.status >= 500) return 30_000;
   return 0;
 }
 
-/** Baca stream SSE di background dan ambil total_tokens dari chunk terakhir. */
+/** Read the SSE stream in the background and grab total_tokens from the last chunk. */
 async function readTotalTokens(stream: ReadableStream<Uint8Array>): Promise<number | null> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -115,7 +115,7 @@ async function readTotalTokens(stream: ReadableStream<Uint8Array>): Promise<numb
     }
     scan(buffer);
   } catch {
-    // Stream putus (misalnya client disconnect). Pakai hasil sejauh ini.
+    // Stream was cut off (e.g. client disconnected). Use what we have so far.
   }
   return total;
 }
@@ -180,7 +180,7 @@ async function forwardSuccess(
     const parsed = JSON.parse(text) as { usage?: { total_tokens?: number } };
     if (typeof parsed.usage?.total_tokens === "number") actual = parsed.usage.total_tokens;
   } catch {
-    // Response bukan JSON. Pakai estimasi.
+    // Response isn't JSON. Use the estimate.
   }
   ctx.waitUntil(quota.record(provider.id, actual, est));
   headers.set("content-type", res.headers.get("content-type") ?? "application/json");
@@ -200,7 +200,7 @@ interface HealthCheckResult {
   error?: string;
 }
 
-/** Kirim request minimal (max_tokens: 1) ke setiap target di AUTO_TARGETS, paralel. */
+/** Send a minimal request (max_tokens: 1) to every target in AUTO_TARGETS, in parallel. */
 async function healthcheck(env: Env): Promise<HealthCheckResult[]> {
   const pingBody: ChatBody = {
     messages: [{ role: "user", content: "ping" }],
@@ -212,14 +212,14 @@ async function healthcheck(env: Env): Promise<HealthCheckResult[]> {
     AUTO_TARGETS.map(async (target): Promise<HealthCheckResult> => {
       const provider = PROVIDER_MAP.get(target.provider);
       if (!provider) {
-        return { provider: target.provider, model: target.model, ok: false, error: "provider tidak terdaftar di PROVIDERS" };
+        return { provider: target.provider, model: target.model, ok: false, error: "provider not registered in PROVIDERS" };
       }
       if (!env[provider.apiKeySecret]) {
         return {
           provider: provider.id,
           model: target.model,
           ok: false,
-          error: `secret ${provider.apiKeySecret} belum di-set`,
+          error: `secret ${provider.apiKeySecret} is not set`,
         };
       }
 
@@ -228,7 +228,7 @@ async function healthcheck(env: Env): Promise<HealthCheckResult[]> {
         const res = await callUpstream(provider, target, pingBody, env);
         const latencyMs = Date.now() - start;
         if (res.ok) {
-          await res.text(); // drain body, isinya tidak dipakai
+          await res.text(); // drain the body, content is unused
           return { provider: provider.id, model: target.model, ok: true, status: res.status, latencyMs };
         }
         const text = await res.text();
@@ -262,14 +262,14 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   try {
     body = await req.json<ChatBody>();
   } catch {
-    return apiError("Body harus JSON yang valid.", 400, "invalid_request_error");
+    return apiError("Body must be valid JSON.", 400, "invalid_request_error");
   }
 
   const est = estimateTokens(body);
   const quota = env.QUOTA.get(env.QUOTA.idFromName("global"));
   const tried = new Set<number>();
   const failures: string[] = [];
-  // true kalau ada kegagalan yang bisa hilang dengan menunggu (limit, error server).
+  // true if the failure could go away by waiting (rate limit, server error).
   let retryable = false;
 
   while (tried.size < AUTO_TARGETS.length) {
@@ -282,13 +282,13 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
       if (!provider) {
         tried.add(index);
-        failures.push(`${label}: provider tidak terdaftar di PROVIDERS`);
+        failures.push(`${label}: provider not registered in PROVIDERS`);
       } else if (!env[provider.apiKeySecret]) {
         tried.add(index);
-        failures.push(`${label}: secret ${provider.apiKeySecret} belum di-set`);
+        failures.push(`${label}: secret ${provider.apiKeySecret} is not set`);
       } else if (t.contextWindow && est > t.contextWindow) {
         tried.add(index);
-        failures.push(`${label}: context ${t.contextWindow} < estimasi ${est} token`);
+        failures.push(`${label}: context ${t.contextWindow} < estimated ${est} tokens`);
       } else {
         candidates.push({
           index,
@@ -302,7 +302,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
     const picked = await quota.acquire(candidates, est);
     if (picked === null) {
-      failures.push("provider tersisa sedang habis kuota atau cooldown");
+      failures.push("remaining providers are out of quota or in cooldown");
       retryable = true;
       break;
     }
@@ -329,14 +329,14 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     const text = await res.text();
 
     if (res.status >= 500 || FALLBACK_STATUSES.has(res.status)) {
-      // 429 tetap dihitung sebagai request terpakai.
+      // 429 still counts as a used request.
       await quota.fail(provider.id, est, res.status === 429, cooldownFor(res));
       failures.push(`${label}: HTTP ${res.status} ${text.slice(0, 200)}`);
       retryable = true;
       continue;
     }
 
-    // 400/422: kembalikan apa adanya, jangan fallback.
+    // 400/422: return as-is, don't fall back.
     await quota.fail(provider.id, est, false, 0);
     return new Response(text, {
       status: res.status,
@@ -349,11 +349,11 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const detail = failures.join(" | ");
   if (!retryable) {
-    // Contoh: request terlalu besar untuk semua target. Menunggu tidak akan membantu.
-    return apiError(`Tidak ada target yang cocok untuk request ini. Detail: ${detail}`, 400,
+    // Example: the request is too large for every target. Waiting won't help.
+    return apiError(`No matching target for this request. Details: ${detail}`, 400,
       "invalid_request_error");
   }
-  return apiError(`Semua provider gagal atau habis kuota. Detail: ${detail}`, 429,
+  return apiError(`All providers failed or are out of quota. Details: ${detail}`, 429,
     "rate_limit_error", { "retry-after": "60" });
 }
 

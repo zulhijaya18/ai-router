@@ -1,82 +1,81 @@
-# AI Proxy di Cloudflare Workers
+# AI Proxy on Cloudflare Workers
 
-Proxy OpenAI-compatible untuk Hermes Agent atau aplikasi AI lain.
-Alurnya: Hermes → proxy ini → provider (Cerebras, Groq, OpenRouter, dll).
+An OpenAI-compatible proxy for Hermes Agent or other AI applications.
+Flow: Hermes → this proxy → provider (Cerebras, Groq, OpenRouter, etc).
 
-## Fitur
+## Features
 
-- **Fallback otomatis (priority list).** Semua request selalu dicoba sesuai urutan `AUTO_TARGETS` di `config.ts`. Kalau satu provider membalas 429 atau error server, request pindah ke pasangan provider+model berikutnya dalam daftar itu.
-- **Tracking kuota.** Proxy menghitung request per menit, request per hari, dan token per hari.
-- **Cooldown.** Provider yang kena 429 diistirahatkan sesuai header `Retry-After`.
-- **Filter context.** Request yang terlalu besar untuk model tertentu otomatis dilewati.
-- **Streaming.** Jawaban model diteruskan langsung ke client, kata per kata.
+- **Automatic fallback (priority list).** Every request is always tried in the order of `AUTO_TARGETS` in `config.ts`. If a provider replies with 429 or a server error, the request moves to the next provider+model pair in the list.
+- **Quota tracking.** The proxy counts requests per minute, requests per day, and tokens per day.
+- **Cooldown.** A provider that hits 429 is rested according to the `Retry-After` header.
+- **Context filtering.** Requests too large for a given model are automatically skipped.
+- **Streaming.** The model's answer is forwarded straight to the client, token by token.
 
-Tracking kuota memakai **Durable Object**.
-Durable Object adalah penyimpanan kecil milik Cloudflare yang memproses data satu per satu.
-Jadi counter tidak bentrok walau ada banyak request bersamaan.
+Quota tracking uses a **Durable Object**.
+A Durable Object is Cloudflare's small storage primitive that processes data one call at a time.
+So counters never race even under many concurrent requests.
 
-## Struktur file
+## File structure
 
 ```
-src/config.ts   ← yang perlu kamu edit: provider, limit, priority list model
-src/index.ts    ← logika proxy
-src/quota.ts    ← penghitung kuota (Durable Object)
-wrangler.jsonc  ← konfigurasi deploy
+src/config.ts   ← what you need to edit: providers, limits, model priority list
+src/index.ts    ← proxy logic
+src/quota.ts    ← quota counter (Durable Object)
+wrangler.jsonc  ← deploy configuration
 ```
 
 ## 1. Install
 
 ```bash
-npm install
-npx wrangler login
+pnpm install
+pnpm dlx wrangler login
 ```
 
-## 2. Atur provider dan priority list
+## 2. Configure providers and the priority list
 
-Buka `src/config.ts`.
+Open `src/config.ts`.
 
-Di `PROVIDERS`, isi setiap provider:
-- `baseUrl` harus berhenti di `/v1`.
-- `apiKeySecret` adalah nama secret yang menyimpan API key.
-- `limits` diisi sesuai limit akun kamu.
+In `PROVIDERS`, fill in each provider:
+- `baseUrl` must stop at `/v1`.
+- `apiKeySecret` is the name of the secret holding the API key.
+- `limits` should match your account's own limits.
 
-Di `AUTO_TARGETS`, buat daftar pasangan provider+model, diurutkan dari yang
-paling kamu prioritaskan ke yang paling belakang. Proxy selalu mencoba dari
-urutan paling atas, lompat ke bawahnya kalau target di atas gagal, kena limit,
-atau kena cooldown.
+In `AUTO_TARGETS`, build a list of provider+model pairs, ordered from most
+to least preferred. The proxy always tries them from the top, moving down
+whenever a target above fails, hits a limit, or is in cooldown.
 
-Cek ulang nama model di dokumentasi tiap provider. Nama model sering berubah.
+Double-check model names in each provider's docs. Model names change often.
 
-**Field `model` dari client diabaikan sepenuhnya.** Client tidak memilih model
-atau provider — proxy yang menentukan lewat `AUTO_TARGETS`. Tidak ada lagi
-konsep beberapa route bernama atau strategi `balance`; hanya satu priority
-list yang selalu dipakai.
+**The client's `model` field is completely ignored.** The client doesn't
+choose the model or provider — the proxy decides via `AUTO_TARGETS`. There's
+no more concept of multiple named routes or a `balance` strategy; just one
+priority list that's always used.
 
-## 3. Simpan secret
+## 3. Store secrets
 
 ```bash
-npx wrangler secret put PROXY_API_KEY
-npx wrangler secret put CEREBRAS_API_KEY
-npx wrangler secret put GROQ_API_KEY
-npx wrangler secret put OPENROUTER_API_KEY
-npx wrangler secret put NVIDIA_NIM_API_KEY
+pnpm dlx wrangler secret put PROXY_API_KEY
+pnpm dlx wrangler secret put CEREBRAS_API_KEY
+pnpm dlx wrangler secret put GROQ_API_KEY
+pnpm dlx wrangler secret put OPENROUTER_API_KEY
+pnpm dlx wrangler secret put NVIDIA_NIM_API_KEY
 ```
 
-`PROXY_API_KEY` adalah kunci milik proxy kamu sendiri.
-Isi dengan string acak yang panjang, misalnya hasil `openssl rand -hex 32`.
-Tanpa kunci ini, semua request ditolak.
+`PROXY_API_KEY` is your own proxy's key.
+Fill it with a long random string, e.g. the output of `openssl rand -hex 32`.
+Without this key, every request is rejected.
 
 ## 4. Deploy
 
 ```bash
-npm run deploy
+pnpm run deploy
 ```
 
-Wrangler akan menampilkan URL seperti `https://ai-proxy.<subdomain>.workers.dev`.
+Wrangler will print a URL like `https://ai-proxy.<subdomain>.workers.dev`.
 
-## 5. Hubungkan ke Hermes
+## 5. Connect to Hermes
 
-Tambahkan di `~/.hermes/config.yaml`:
+Add to `~/.hermes/config.yaml`:
 
 ```yaml
 custom_providers:
@@ -90,77 +89,78 @@ model:
   default: custom:my-proxy:auto
 ```
 
-Nama model di baris `default` (`auto`) hanya format yang dibutuhkan Hermes —
-proxy tidak membaca nilainya sama sekali. Model dan provider yang benar-benar
-dipakai selalu ditentukan oleh urutan `AUTO_TARGETS` di `config.ts`.
+The model name on the `default` line (`auto`) is just the format Hermes
+requires — the proxy doesn't read its value at all. The model and provider
+actually used are always determined by the order of `AUTO_TARGETS` in
+`config.ts`.
 
-Lalu simpan kuncinya di `~/.hermes/.env`:
+Then store the key in `~/.hermes/.env`:
 
 ```bash
-echo 'MY_PROXY_KEY=isi-sama-dengan-PROXY_API_KEY' >> ~/.hermes/.env
+echo 'MY_PROXY_KEY=same-value-as-PROXY_API_KEY' >> ~/.hermes/.env
 ```
 
-## Endpoint
+## Endpoints
 
-| Method | Path | Fungsi |
+| Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/chat/completions` | Chat, format OpenAI |
-| GET | `/v1/models` | Selalu balas satu entry: `auto` |
-| GET | `/status` | Pemakaian kuota hari ini per provider |
-| GET | `/health` | Test koneksi nyata ke semua provider+model di `AUTO_TARGETS` |
-| POST | `/admin/reset?provider=cerebras` | Reset counter satu provider (tanpa query = semua) |
+| POST | `/v1/chat/completions` | Chat, OpenAI format |
+| GET | `/v1/models` | Always replies with a single entry: `auto` |
+| GET | `/status` | Today's quota usage per provider |
+| GET | `/health` | Real connectivity test against every provider+model in `AUTO_TARGETS` |
+| POST | `/admin/reset?provider=cerebras` | Reset one provider's counter (no query = all) |
 
-Semua endpoint butuh header `Authorization: Bearer <PROXY_API_KEY>`.
+Every endpoint requires the `Authorization: Bearer <PROXY_API_KEY>` header.
 
-Cek kuota:
+Check quota:
 
 ```bash
 curl https://ai-proxy.<subdomain>.workers.dev/status \
   -H "Authorization: Bearer $MY_PROXY_KEY"
 ```
 
-Cek koneksi ke semua provider/model di `AUTO_TARGETS`
-(kirim request sungguhan dengan `max_tokens: 1` ke tiap target):
+Check connectivity to every provider/model in `AUTO_TARGETS`
+(sends a real request with `max_tokens: 1` to each target):
 
 ```bash
 curl https://ai-proxy.<subdomain>.workers.dev/health \
   -H "Authorization: Bearer $MY_PROXY_KEY"
 ```
 
-Contoh hasil:
+Example result:
 
 ```json
 {
   "ok": false,
   "checks": [
     { "provider": "cerebras", "model": "openai/gpt-oss-120b", "ok": true, "status": 200, "latencyMs": 312 },
-    { "provider": "openrouter", "model": "nvidia/nemotron-3-ultra:free", "ok": true, "status": 200, "latencyMs": 900 },
-    { "provider": "nvidia-nim", "model": "openai/gpt-oss-20b", "ok": false, "error": "secret NVIDIA_NIM_API_KEY belum di-set" }
+    { "provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free", "ok": true, "status": 200, "latencyMs": 900 },
+    { "provider": "nvidia-nim", "model": "openai/gpt-oss-20b", "ok": false, "error": "secret NVIDIA_NIM_API_KEY is not set" }
   ]
 }
 ```
 
-Response HTTP-nya `200` kalau semua target `ok`, `503` kalau ada yang gagal.
+The HTTP response is `200` when every target is `ok`, `503` if any of them fail.
 
-Setiap response sukses membawa header `x-proxy-provider` dan `x-proxy-model`.
-Header ini menunjukkan provider mana yang benar-benar menjawab.
+Every successful response carries `x-proxy-provider` and `x-proxy-model` headers.
+These headers show which provider actually answered.
 
-## Development lokal
+## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars   # lalu isi nilainya
-npm run dev
+cp .dev.vars.example .dev.vars   # then fill in the values
+pnpm run dev
 ```
 
-## Catatan penting
+## Important notes
 
-- **Tidak ada pilihan model dari client.** Field `model` di request selalu diabaikan. Untuk menambah/mengganti/mengurutkan ulang model yang dipakai, edit `AUTO_TARGETS` di `config.ts`.
-- **Kuota adalah hitungan proxy, bukan data asli provider.** Kalau kamu memakai akun yang sama di luar proxy, hitungannya tidak sinkron. Cooldown dari 429 tetap menjadi pengaman.
-- **Estimasi token itu kasar.** Proxy memakai rumus 1 token ≈ 4 karakter untuk memilih provider. Setelah response selesai, angka diganti dengan token asli dari field `usage`.
-- **Reset harian mengikuti 00:00 UTC.** Itu sama dengan pukul 08:00 WITA. Beberapa provider mungkin memakai waktu reset berbeda.
-- **Fallback hanya terjadi sebelum jawaban mulai dikirim.** Kalau stream sudah berjalan lalu provider putus, proxy tidak bisa pindah diam-diam.
-- **Error 400 dan 422 tidak di-fallback.** Error ini biasanya kesalahan request itu sendiri, jadi provider lain juga akan menolak.
-- **Context Hermes.** Hermes butuh sekitar 64K context. Target dengan context kecil (misalnya Cerebras free 8K) akan otomatis dilewati untuk request besar.
-- **CPU limit free plan.** Free plan Workers punya batas CPU time kecil. Menunggu provider tidak dihitung, tapi membaca stream untuk menghitung token dihitung. Kalau muncul error "Exceeded CPU", set `METER_STREAM_USAGE = false` di `config.ts`.
-- **Durable Object di free plan.** Project ini memakai Durable Object berbasis SQLite. Kalau deploy ditolak karena plan, cek pengaturan akun Cloudflare kamu.
-- **Terms of service.** Menyebar request ke beberapa provider berbeda itu wajar. Membuat banyak akun di provider yang sama untuk melipatgandakan kuota gratis biasanya melanggar aturan provider.
+- **No model choice from the client.** The `model` field in the request is always ignored. To add/change/reorder the models used, edit `AUTO_TARGETS` in `config.ts`.
+- **Quota is the proxy's own count, not the provider's real data.** If you use the same account outside this proxy, the counts won't be in sync. Cooldown from 429s still acts as a safety net.
+- **Token estimation is rough.** The proxy uses the rule of thumb 1 token ≈ 4 characters to pick a provider. Once the response finishes, the number is replaced with the real token count from the `usage` field.
+- **Daily reset follows 00:00 UTC.** Some providers may use a different reset time.
+- **Fallback only happens before the answer starts streaming.** If the stream has already started and the provider drops, the proxy can't silently switch.
+- **400 and 422 errors are not retried.** These are usually the request's own fault, so other providers would reject it too.
+- **Context window per target.** Each target in `AUTO_TARGETS` has its own `contextWindow`; requests too large for a given target are automatically skipped in favor of the next one.
+- **Free-plan CPU limit.** The Workers free plan has a small CPU time budget. Waiting on a provider doesn't count against it, but reading the stream to count tokens does. If you hit an "Exceeded CPU" error, set `METER_STREAM_USAGE = false` in `config.ts`.
+- **Durable Object on the free plan.** This project uses a SQLite-backed Durable Object. If deployment is rejected because of your plan, check your Cloudflare account settings.
+- **Terms of service.** Spreading requests across different providers is fine. Creating multiple accounts on the same provider to multiply free quotas usually violates that provider's terms.

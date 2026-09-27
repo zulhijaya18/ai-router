@@ -1,53 +1,54 @@
 // =====================================================================
-// KONFIGURASI PROXY
-// Edit file ini untuk menambah provider, limit, dan target model.
+// PROXY CONFIGURATION
+// Edit this file to add providers, limits, and model targets.
 // =====================================================================
 
 export interface Limits {
-  /** Request per menit */
+  /** Requests per minute */
   rpm?: number;
-  /** Request per hari (reset 00:00 UTC) */
+  /** Requests per day (resets at 00:00 UTC) */
   rpd?: number;
-  /** Token per hari (reset 00:00 UTC) */
+  /** Tokens per day (resets at 00:00 UTC) */
   tpd?: number;
 }
 
 export interface ProviderConfig {
-  /** ID unik provider. Kuota dihitung per ID ini. */
+  /** Unique provider ID. Quota is tracked per this ID. */
   id: string;
-  /** Base URL OpenAI-compatible, berhenti di /v1 (tanpa /chat/completions) */
+  /** OpenAI-compatible base URL, stops at /v1 (without /chat/completions) */
   baseUrl: string;
-  /** Nama secret di Cloudflare yang berisi API key provider */
+  /** Name of the Cloudflare secret holding this provider's API key */
   apiKeySecret: string;
-  /** Limit akun kamu di provider ini. Kosongkan kalau tidak ada limit. */
+  /** Your account's limits for this provider. Leave empty if unlimited. */
   limits?: Limits;
-  /** Header tambahan (opsional) */
+  /** Extra headers (optional) */
   headers?: Record<string, string>;
   /**
-   * Kirim stream_options.include_usage saat streaming.
-   * Matikan (false) kalau provider menolak parameter ini.
+   * Send stream_options.include_usage while streaming.
+   * Turn off (false) if the provider rejects this parameter.
    */
   streamUsage?: boolean;
 }
 
 export interface RouteTarget {
-  /** ID provider dari daftar PROVIDERS */
+  /** Provider ID from the PROVIDERS list */
   provider: string;
-  /** Nama model sesuai format provider tersebut */
+  /** Model name in that provider's own format */
   model: string;
-  /** Context window model. Request yang terlalu besar otomatis dilewati. */
+  /** Model's context window. Oversized requests are automatically skipped. */
   contextWindow?: number;
 }
 
 /**
- * Hitung token asli dari stream (lebih akurat, tapi memakai sedikit CPU).
- * Set false kalau Worker kena error "Exceeded CPU" di free plan.
+ * Count actual tokens from the stream (more accurate, costs a bit of CPU).
+ * Set to false if the Worker hits an "Exceeded CPU" error on the free plan.
  */
 export const METER_STREAM_USAGE = true;
 
 // ---------------------------------------------------------------------
-// PROVIDER
-// Angka limit di bawah hanya contoh. Ganti sesuai limit akun kamu.
+// PROVIDERS
+// The limit numbers below are just examples. Replace them with your
+// own account's limits.
 // ---------------------------------------------------------------------
 export const PROVIDERS: ProviderConfig[] = [
   {
@@ -60,35 +61,35 @@ export const PROVIDERS: ProviderConfig[] = [
     id: "groq",
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeySecret: "GROQ_API_KEY",
-    // Limit Groq berbeda per model. Buat entry provider terpisah
-    // kalau kamu memakai beberapa model Groq dengan limit berbeda.
     limits: { rpm: 30, rpd: 1_000 },
   },
   {
     id: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",
     apiKeySecret: "OPENROUTER_API_KEY",
-    // Limit model :free digabung untuk semua model gratis.
     limits: { rpm: 20, rpd: 1_000 },
   },
   {
     id: "nvidia-nim",
     baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeySecret: "NVIDIA_NIM_API_KEY",
-    // Free tier NVIDIA NIM biasanya 40 rpm. Sesuaikan dengan akun kamu.
     limits: { rpm: 40 },
   },
 ];
 
 // ---------------------------------------------------------------------
 // AUTO TARGETS
-// Satu daftar pasangan provider+model, diurutkan sebagai priority list.
-// Field "model" dari client (kalau ada) diabaikan sepenuhnya — proxy
-// selalu coba target ini dari atas ke bawah, lompat ke berikutnya kalau
-// yang di atas gagal/kena limit/kena cooldown.
+// A single list of provider+model pairs, ordered as a priority list.
+// The client's "model" field (if any) is completely ignored — the proxy
+// always tries these targets top to bottom, moving to the next one
+// whenever the one above fails, hits a limit, or is in cooldown.
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
-  { provider: "cerebras", model: "openai/gpt-oss-120b", contextWindow: 8_192 },
-  { provider: "openrouter", model: "nvidia/nemotron-3-ultra:free", contextWindow: 131_072 },
+  { provider: "cerebras", model: "openai/gpt-oss-120b", contextWindow: 131_072 },
+  {
+    provider: "openrouter",
+    model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    contextWindow: 1_000_000,
+  },
   { provider: "nvidia-nim", model: "openai/gpt-oss-20b", contextWindow: 131_072 },
 ];
