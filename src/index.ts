@@ -124,6 +124,23 @@ async function readTotalTokens(stream: ReadableStream<Uint8Array>): Promise<numb
 // Upstream
 // ---------------------------------------------------------------------
 
+// Vendor-specific fields some reasoning models (gpt-oss, Nemotron, ...) attach
+// to assistant messages in their response. Clients often echo these back in
+// the next request's message history. Since a fallback can land on a
+// different provider with a stricter schema that rejects unknown message
+// properties, strip them before forwarding so every provider always sees
+// plain OpenAI-shaped messages.
+const NON_STANDARD_MESSAGE_FIELDS = ["reasoning_content", "reasoning"];
+
+function sanitizeMessages(messages: unknown[]): unknown[] {
+  return messages.map((m) => {
+    if (!m || typeof m !== "object") return m;
+    const clean = { ...(m as Record<string, unknown>) };
+    for (const field of NON_STANDARD_MESSAGE_FIELDS) delete clean[field];
+    return clean;
+  });
+}
+
 async function callUpstream(
   provider: ProviderConfig,
   target: RouteTarget,
@@ -131,6 +148,9 @@ async function callUpstream(
   env: Env,
 ): Promise<Response> {
   const upstreamBody: Record<string, unknown> = { ...body, model: target.model };
+  if (Array.isArray(body.messages)) {
+    upstreamBody.messages = sanitizeMessages(body.messages);
+  }
   if (body.stream && provider.streamUsage !== false) {
     upstreamBody.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
   }
