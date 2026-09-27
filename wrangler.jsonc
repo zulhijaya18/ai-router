@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "QUOTA", "class_name": "QuotaTracker" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaTracker"] }],
+  "observability": { "enabled": true }
+}
