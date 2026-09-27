@@ -66,11 +66,42 @@ function isAuthorized(req: Request, env: Env): boolean {
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
-/** Rough estimate: 1 token ≈ 4 characters. */
+// Flat per-item estimate for a non-text content part (image_url, file, ...).
+// A base64 data URI can be hundreds of thousands of characters long, but its
+// real token cost depends on the provider's own image tiling/resolution
+// rules, not on the length of that string — counting it via chars/4 would
+// wildly overestimate and make every target look "too large" to use.
+const MULTIMODAL_PART_TOKEN_ESTIMATE = 1_500;
+
+/** Rough estimate: 1 token ≈ 4 characters for text, flat estimate for images/files. */
 function estimateTokens(body: ChatBody): number {
-  const promptChars = JSON.stringify([body.messages ?? [], body.tools ?? []]).length;
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  let promptTokens = 0;
+
+  for (const m of messages) {
+    if (!m || typeof m !== "object") continue;
+    const content = (m as Record<string, unknown>).content;
+
+    if (typeof content === "string") {
+      promptTokens += Math.ceil(content.length / 4);
+    } else if (Array.isArray(content)) {
+      for (const part of content) {
+        if (!part || typeof part !== "object") continue;
+        const p = part as Record<string, unknown>;
+        if (p.type === "text" && typeof p.text === "string") {
+          promptTokens += Math.ceil(p.text.length / 4);
+        } else {
+          promptTokens += MULTIMODAL_PART_TOKEN_ESTIMATE;
+        }
+      }
+    } else if (content != null) {
+      promptTokens += Math.ceil(JSON.stringify(content).length / 4);
+    }
+  }
+
+  promptTokens += Math.ceil(JSON.stringify(body.tools ?? []).length / 4);
   const output = Number(body.max_tokens ?? body.max_completion_tokens ?? 1024);
-  return Math.ceil(promptChars / 4) + output;
+  return promptTokens + output;
 }
 
 /**

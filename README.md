@@ -156,7 +156,7 @@ pnpm run dev
 
 - **No model choice from the client.** The `model` field in the request is always ignored. To add/change/reorder the models used, edit `AUTO_TARGETS` in `config.ts`.
 - **Quota is the proxy's own count, not the provider's real data.** If you use the same account outside this proxy, the counts won't be in sync. Cooldown from 429s still acts as a safety net.
-- **Token estimation is rough.** The proxy uses the rule of thumb 1 token ≈ 4 characters to pick a provider. Once the response finishes, the number is replaced with the real token count from the `usage` field.
+- **Token estimation is rough.** The proxy uses the rule of thumb 1 token ≈ 4 characters for text to pick a provider, and a flat ~1,500-token estimate per image/file content part (since a base64 data URI's character length has no reliable relationship to its real token cost). Once the response finishes, the number is replaced with the real token count from the `usage` field.
 - **Daily reset follows 00:00 UTC.** Some providers may use a different reset time.
 - **Fallback only happens before the answer starts streaming.** If the stream has already started and the provider drops, the proxy can't silently switch.
 - **400 and 422 errors are not retried.** These are usually the request's own fault, so other providers would reject it too.
