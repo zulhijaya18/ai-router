@@ -111,14 +111,6 @@ export const AUTO_TARGETS: RouteTarget[] = [
     supportsImages: false,
   },
   {
-    // Kimi K3 has native vision support, but that hasn't been verified
-    // against NVIDIA NIM's specific hosted endpoint yet — double-check
-    // with a real image request before trusting this in production.
-    provider: "nvidia-nim",
-    model: "moonshotai/kimi-k3",
-    contextWindow: 1_000_000,
-  },
-  {
     provider: "nvidia-nim",
     model: "openai/gpt-oss-20b",
     contextWindow: 131_072,
