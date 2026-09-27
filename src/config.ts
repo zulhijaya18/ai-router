@@ -86,10 +86,10 @@ export const PROVIDERS: ProviderConfig[] = [
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
   { provider: "cerebras", model: "openai/gpt-oss-120b", contextWindow: 131_072 },
+  { provider: "nvidia-nim", model: "openai/gpt-oss-20b", contextWindow: 131_072 },
   {
     provider: "openrouter",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
     contextWindow: 1_000_000,
   },
-  { provider: "nvidia-nim", model: "openai/gpt-oss-20b", contextWindow: 131_072 },
 ];
