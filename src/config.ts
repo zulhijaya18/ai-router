@@ -123,6 +123,7 @@ export const AUTO_TARGETS: RouteTarget[] = [
     provider: "gemini",
     model: "gemini-3.1-flash-lite",
     contextWindow: 1_048_576,
+    supportsTools: false,
   },
   {
     provider: "cerebras",
