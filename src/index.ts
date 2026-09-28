@@ -36,6 +36,18 @@ const TOTAL_TOKENS_RE = /"total_tokens"\s*:\s*(\d+)/;
 // 400 and 422 are excluded because they're usually the request's own fault.
 const FALLBACK_STATUSES = new Set([401, 402, 403, 404, 408, 409, 413, 429]);
 
+/**
+ * Google's Gemini API blocks requests from certain regions with a 400
+ * FAILED_PRECONDITION ("User location is not supported"). This isn't the
+ * request's fault — Cloudflare Workers don't run at a fixed edge location,
+ * so the same proxy can hit a blocked colo on one request and a fine one on
+ * the next. Treat this specific pattern as fallback-worthy despite being a
+ * 400, instead of handing the client a geography error they can't act on.
+ */
+function isRegionBlocked400(status: number, text: string): boolean {
+  return status === 400 && text.includes("FAILED_PRECONDITION") && text.includes("location");
+}
+
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
@@ -406,7 +418,11 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
     const text = await res.text();
 
-    if (res.status >= 500 || FALLBACK_STATUSES.has(res.status)) {
+    if (
+      res.status >= 500 ||
+      FALLBACK_STATUSES.has(res.status) ||
+      isRegionBlocked400(res.status, text)
+    ) {
       // 429 still counts as a used request.
       await quota.fail(provider.id, est, res.status === 429, cooldownFor(res));
       failures.push(`${label}: HTTP ${res.status} ${text.slice(0, 200)}`);
