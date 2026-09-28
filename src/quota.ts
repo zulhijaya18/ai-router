@@ -15,6 +15,7 @@ export interface Counter {
   tokens: number;
   minute: number;
   minuteRequests: number;
+  minuteTokens: number;
   cooldownUntil: number;
 }
 
@@ -33,8 +34,9 @@ export class QuotaTracker extends DurableObject {
 
     let c = this.counters.get(key) ?? (await this.ctx.storage.get<Counter>(key));
     if (!c) {
-      c = { day, requests: 0, tokens: 0, minute, minuteRequests: 0, cooldownUntil: 0 };
+      c = { day, requests: 0, tokens: 0, minute, minuteRequests: 0, minuteTokens: 0, cooldownUntil: 0 };
     }
+    if (c.minuteTokens === undefined) c.minuteTokens = 0; // upgrade older stored counters
     if (c.day !== day) {
       c.day = day;
       c.requests = 0;
@@ -43,6 +45,7 @@ export class QuotaTracker extends DurableObject {
     if (c.minute !== minute) {
       c.minute = minute;
       c.minuteRequests = 0;
+      c.minuteTokens = 0;
     }
     this.counters.set(key, c);
     return c;
@@ -57,6 +60,7 @@ export class QuotaTracker extends DurableObject {
   private headroom(c: Counter, limits: Limits, est: number, now: number): number {
     if (now < c.cooldownUntil) return -1;
     if (limits.rpm && c.minuteRequests >= limits.rpm) return -1;
+    if (limits.tpm && c.minuteTokens + est > limits.tpm) return -1;
 
     const ratios: number[] = [];
     if (limits.rpd) {
@@ -87,6 +91,7 @@ export class QuotaTracker extends DurableObject {
       counter.requests += 1;
       counter.minuteRequests += 1;
       counter.tokens += estTokens;
+      counter.minuteTokens += estTokens;
       await this.save(cand.quotaKey, counter);
       return cand.index;
     }
@@ -112,6 +117,7 @@ export class QuotaTracker extends DurableObject {
   ): Promise<void> {
     const c = await this.load(key);
     c.tokens = Math.max(0, c.tokens - estimatedTokens);
+    c.minuteTokens = Math.max(0, c.minuteTokens - estimatedTokens);
     if (!countRequest) {
       c.requests = Math.max(0, c.requests - 1);
       c.minuteRequests = Math.max(0, c.minuteRequests - 1);

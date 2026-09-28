@@ -8,6 +8,8 @@ export interface Limits {
   rpm?: number;
   /** Requests per day (resets at 00:00 UTC) */
   rpd?: number;
+  /** Tokens per minute */
+  tpm?: number;
   /** Tokens per day (resets at 00:00 UTC) */
   tpd?: number;
 }
@@ -75,7 +77,7 @@ export const PROVIDERS: ProviderConfig[] = [
     id: "groq",
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeySecret: "GROQ_API_KEY",
-    limits: { rpm: 30, rpd: 1_000 },
+    limits: { rpm: 30, rpd: 1_000, tpm: 8_000, tpd: 200_000 },
   },
   {
     id: "openrouter",
@@ -88,6 +90,12 @@ export const PROVIDERS: ProviderConfig[] = [
     baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeySecret: "NVIDIA_NIM_API_KEY",
     limits: { rpm: 40 },
+  },
+  {
+    id: "gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    apiKeySecret: "GEMINI_API_KEY",
+    limits: { rpm: 15, rpd: 500 },
   },
 ];
 
@@ -103,6 +111,17 @@ export const AUTO_TARGETS: RouteTarget[] = [
   // and NVIDIA NIM's current backends (raw tokens like "<|channel|>" ending
   // up in tool names, or the header parser panicking outright). Until that's
   // fixed upstream, keep these unavailable for requests with `tools`.
+  {
+    provider: "gemini",
+    model: "gemini-3.1-flash-lite",
+    contextWindow: 1_048_576,
+  },
+  {
+    provider: "groq",
+    model: "qwen/qwen3.8-27b",
+    contextWindow: 131_072,
+    supportsImages: false,
+  },
   {
     provider: "cerebras",
     model: "gpt-oss-120b",

@@ -59,6 +59,7 @@ pnpm dlx wrangler secret put CEREBRAS_API_KEY
 pnpm dlx wrangler secret put GROQ_API_KEY
 pnpm dlx wrangler secret put OPENROUTER_API_KEY
 pnpm dlx wrangler secret put NVIDIA_NIM_API_KEY
+pnpm dlx wrangler secret put GEMINI_API_KEY
 ```
 
 `PROXY_API_KEY` is your own proxy's key.

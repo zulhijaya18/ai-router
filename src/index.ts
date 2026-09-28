@@ -453,7 +453,7 @@ async function status(env: Env): Promise<Response> {
         provider: p.id,
         limits: p.limits ?? {},
         today: { date: c.day, requests: c.requests, tokens: c.tokens },
-        thisMinute: c.minuteRequests,
+        thisMinute: { requests: c.minuteRequests, tokens: c.minuteTokens },
         cooldownSeconds: Math.max(0, Math.ceil((c.cooldownUntil - now) / 1000)),
       };
     }),
