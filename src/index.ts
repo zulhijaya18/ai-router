@@ -425,11 +425,13 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     } catch (err) {
       await quota.fail(provider.id, est, false, 30_000);
       failures.push(`${label}: network error ${String(err)}`);
+      console.error(`[ai-router] ${label}: network error ${String(err)}`);
       retryable = true;
       continue;
     }
 
     if (res.ok) {
+      console.log(`[ai-router] ${label}: ok (stream=${Boolean(body.stream)}, tools=${usesTools})`);
       return forwardSuccess(res, provider, target, body, est, quota, ctx);
     }
 
@@ -444,11 +446,13 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
       // 429 still counts as a used request.
       await quota.fail(provider.id, est, res.status === 429, cooldownFor(res));
       failures.push(`${label}: HTTP ${res.status} ${text.slice(0, 200)}`);
+      console.error(`[ai-router] ${label}: fallback on HTTP ${res.status}: ${text.slice(0, 500)}`);
       retryable = true;
       continue;
     }
 
     // 400/422: return as-is, don't fall back.
+    console.error(`[ai-router] ${label}: returning HTTP ${res.status} to client (no fallback): ${text.slice(0, 500)}`);
     await quota.fail(provider.id, est, false, 0);
     return new Response(text, {
       status: res.status,
