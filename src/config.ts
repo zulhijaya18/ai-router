@@ -120,17 +120,17 @@ export const AUTO_TARGETS: RouteTarget[] = [
     supportsImages: false,
   },
   {
-    provider: "gemini",
-    model: "gemini-3.1-flash-lite",
-    contextWindow: 1_048_576,
-    supportsTools: false,
-  },
-  {
     provider: "cerebras",
     model: "gpt-oss-120b",
     contextWindow: 131_072,
     supportsTools: false,
     supportsImages: false,
+  },
+  {
+    provider: "gemini",
+    model: "gemini-3.1-flash-lite",
+    contextWindow: 1_048_576,
+    supportsTools: false,
   },
   {
     provider: "nvidia-nim",
