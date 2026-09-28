@@ -48,6 +48,23 @@ function isRegionBlocked400(status: number, text: string): boolean {
   return status === 400 && text.includes("FAILED_PRECONDITION") && text.includes("location");
 }
 
+/**
+ * "This request is too big for THIS model" is a per-target fact, not a
+ * malformed request — a different target with a larger context window can
+ * still succeed with the exact same body. Our own `contextWindow` pre-filter
+ * (estimateTokens) is only an estimate and can be wrong in either direction,
+ * so this is the safety net: if a provider itself rejects for being over its
+ * context limit, treat it as fallback-worthy instead of a hard failure.
+ * Matches the common OpenAI-style `code: "context_length_exceeded"` plus the
+ * looser phrasing several other providers (Gemini, Cerebras, Groq, ...) use.
+ */
+const CONTEXT_LENGTH_ERROR_RE =
+  /context_length_exceeded|context.{0,20}(length|window)|too many (input )?tokens|maximum context length|exceeds the maximum number of tokens/i;
+
+function isContextLengthExceeded(status: number, text: string): boolean {
+  return (status === 400 || status === 422) && CONTEXT_LENGTH_ERROR_RE.test(text);
+}
+
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
@@ -421,7 +438,8 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     if (
       res.status >= 500 ||
       FALLBACK_STATUSES.has(res.status) ||
-      isRegionBlocked400(res.status, text)
+      isRegionBlocked400(res.status, text) ||
+      isContextLengthExceeded(res.status, text)
     ) {
       // 429 still counts as a used request.
       await quota.fail(provider.id, est, res.status === 429, cooldownFor(res));

@@ -107,20 +107,16 @@ export const PROVIDERS: ProviderConfig[] = [
 // whenever the one above fails, hits a limit, or is in cooldown.
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
-  // gpt-oss's Harmony-format tool calls are known to leak/crash on Cerebras
-  // and NVIDIA NIM's current backends (raw tokens like "<|channel|>" ending
-  // up in tool names, or the header parser panicking outright). Until that's
-  // fixed upstream, keep these unavailable for requests with `tools`.
-  {
-    provider: "gemini",
-    model: "gemini-3.1-flash-lite",
-    contextWindow: 1_048_576,
-  },
   {
     provider: "groq",
     model: "qwen/qwen3.8-27b",
     contextWindow: 131_072,
     supportsImages: false,
+  },
+  {
+    provider: "gemini",
+    model: "gemini-3.1-flash-lite",
+    contextWindow: 1_048_576,
   },
   {
     provider: "cerebras",
