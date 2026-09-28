@@ -107,10 +107,16 @@ export const PROVIDERS: ProviderConfig[] = [
 // whenever the one above fails, hits a limit, or is in cooldown.
 // ---------------------------------------------------------------------
 export const AUTO_TARGETS: RouteTarget[] = [
+  // Confirmed unreliable for tool calling: Groq detects a malformed
+  // generation ("tool_use_failed", raw <tool_call> XML tags leaking into
+  // the output) and sends it as an SSE "event: error" mid-stream — after
+  // the HTTP status is already 200, so the proxy can't fall back to the
+  // next target (see the streaming-fallback limitation in the README).
   {
     provider: "groq",
     model: "qwen/qwen3.8-27b",
     contextWindow: 131_072,
+    supportsTools: false,
     supportsImages: false,
   },
   {
